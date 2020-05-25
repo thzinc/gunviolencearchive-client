@@ -265,7 +265,7 @@ func (qc *QueryClient) getIncidentCoordinates(queryID QueryID) ([]incidentCoordi
 	coordinates := []incidentCoordinates{}
 	for _, line := range strings.Split(rawCoordinates, "||") {
 		parts := strings.Split(line, "|")
-		lonStr, latStr, id := parts[0], parts[1], parts[2]
+		latStr, lonStr, id := parts[0], parts[1], parts[2]
 
 		lon, err := strconv.ParseFloat(lonStr, 64)
 		if err != nil {
