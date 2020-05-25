@@ -17,6 +17,7 @@ import (
 	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
+	"github.com/syncromatics/go-kit/log"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -86,6 +87,10 @@ func (qc *QueryClient) Query(opts ...QueryOption) (QueryID, error) {
 
 	queryURL.Path = path.Join(queryURL.Path, "query")
 
+	log.Debug("registering query",
+		"queryID", queryID,
+		"form", options.queryData,
+	)
 	resp, err := qc.client.PostForm(queryURL.String(), options.queryData)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to post query")
@@ -106,6 +111,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	}
 
 	exportCsvURL.Path = path.Join(exportCsvURL.Path, "query", string(queryID), "export-csv")
+	log.Debug("kicking off export to CSV")
 	resp, err := qc.client.Get(exportCsvURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to export query")
@@ -117,6 +123,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 		return nil, errors.Wrap(err, "failed to parse batch URL")
 	}
 
+	log.Debug("starting batch process")
 	resp, err = qc.client.Get(batchURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start export batch")
@@ -130,6 +137,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	group.Go(func() error {
 		// TODO: do something with a context here
 		for {
+			log.Debug("requesting progress update")
 			resp, err = qc.client.PostForm(batchURL.String(), nil)
 			if err != nil {
 				return err
@@ -142,6 +150,8 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 			if err != nil {
 				return err
 			}
+
+			log.Debug("received update on progress", "progress", prog)
 
 			if prog.Percentage == 100 {
 				return nil
@@ -157,6 +167,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	query = batchURL.Query()
 	query.Set("op", "finished")
 	batchURL.RawQuery = query.Encode()
+	log.Debug("finishing batch process")
 	resp, err = qc.client.Get(batchURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to finish export batch")
@@ -175,6 +186,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 
 	downloadURL.Path = path.Join(downloadURL.Path, "export-finished", "download")
 	downloadURL.RawQuery = finalURL.RawQuery
+	log.Debug("downloading CSV result")
 	resp, err = qc.client.Get(downloadURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to finish export batch")
@@ -189,6 +201,7 @@ func (qc *QueryClient) GetIncidentCoordinates(queryID QueryID) ([]IncidentCoordi
 	}
 
 	mapURL.Path = path.Join(mapURL.Path, "query", string(queryID), "map")
+	log.Debug("getting map")
 	resp, err := qc.client.Get(mapURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get map")
