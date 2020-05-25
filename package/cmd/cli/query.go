@@ -1,9 +1,10 @@
 package cli
 
 import (
-	"gunviolencearchive-client/package/gvaclient"
 	"os"
 	"time"
+
+	"github.com/thzinc/gunviolencearchive-client/package/gvaclient"
 
 	"github.com/carmo-evan/strtotime"
 	"github.com/gocarina/gocsv"
@@ -19,6 +20,7 @@ var (
 	queryCmd     = &cobra.Command{
 		Use:   "query",
 		Short: "Queries the Gun Violence Archive",
+		Long:  "Queries and prints comma-separated values. The Gun Violence Archive places opaque limits on the number of records returned for large queries, so your results may be artificially truncated for large queries.",
 	}
 	incidentCmd = &cobra.Command{
 		Use:    "incidents",
@@ -49,7 +51,7 @@ func init() {
 	queryCmd.PersistentFlags().StringVar(&fromDate, "from", "", "Specify the start date to filter results by (inclusive)")
 	queryCmd.PersistentFlags().StringVar(&toDate, "to", "", "Specify the end date to filter results by (inclusive)")
 	queryCmd.AddCommand(incidentCmd)
-	rootCmd.AddCommand(queryCmd)
+	RootCmd.AddCommand(queryCmd)
 }
 
 func populateQueryOptions(cmd *cobra.Command, args []string) {

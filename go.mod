@@ -1,6 +1,6 @@
-module gunviolencearchive-client
+module github.com/thzinc/gunviolencearchive-client
 
-go 1.13
+go 1.13.1
 
 require (
 	github.com/carmo-evan/strtotime v0.0.0-20200108203155-3136cf889e3b

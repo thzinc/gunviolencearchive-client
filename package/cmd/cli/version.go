@@ -14,7 +14,7 @@ var (
 	shortened  = false
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version of the client CLI",
+		Short: "Print the version of the command line interface",
 		Run: func(cmd *cobra.Command, args []string) {
 			var response string
 			versionOutput := goversion.New(version, commit, date)
@@ -33,5 +33,5 @@ var (
 
 func init() {
 	versionCmd.Flags().BoolVarP(&shortened, "short", "s", false, "Use shortened output for version information.")
-	rootCmd.AddCommand(versionCmd)
+	RootCmd.AddCommand(versionCmd)
 }

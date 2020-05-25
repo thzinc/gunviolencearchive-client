@@ -9,8 +9,11 @@ import (
 var (
 	log     *zap.SugaredLogger
 	verbose bool
-	rootCmd = &cobra.Command{
-		Use: "cli",
+	// RootCmd is the root command of the command line interface
+	RootCmd = &cobra.Command{
+		Use:   "gva",
+		Short: "Unofficial command line interface to the Gun Violence Archive",
+		Long:  "This program is unaffiliated with the Gun Violence Archive",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			config := zap.NewProductionConfig()
 			config.Encoding = "console"
@@ -26,12 +29,12 @@ var (
 )
 
 func init() {
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
+	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose logging")
 }
 
 // Execute runs the command line interface to the client
 func Execute() {
-	err := rootCmd.Execute()
+	err := RootCmd.Execute()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
