@@ -14,6 +14,8 @@ gva query incidents --from 2020-01-01 --to 2020-01-07
 
 ## Building
 
+![build](https://github.com/thzinc/gunviolencearchive-client/workflows/build/badge.svg)
+
 To build this software:
 
 ```bash
