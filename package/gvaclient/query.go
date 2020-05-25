@@ -17,7 +17,7 @@ import (
 	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	"github.com/syncromatics/go-kit/log"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -47,9 +47,10 @@ type progress struct {
 type QueryClient struct {
 	client  *http.Client
 	rootURL string
+	log     *zap.SugaredLogger
 }
 
-func NewQueryClient(rootURL string) (*QueryClient, error) {
+func NewQueryClient(rootURL string, log *zap.SugaredLogger) (*QueryClient, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to init cookie jar")
@@ -64,6 +65,7 @@ func NewQueryClient(rootURL string) (*QueryClient, error) {
 	return &QueryClient{
 		client,
 		rootURL,
+		log,
 	}, nil
 }
 
@@ -87,7 +89,7 @@ func (qc *QueryClient) Query(opts ...QueryOption) (QueryID, error) {
 
 	queryURL.Path = path.Join(queryURL.Path, "query")
 
-	log.Debug("registering query",
+	qc.log.Debug("registering query",
 		"queryID", queryID,
 		"form", options.queryData,
 	)
@@ -111,7 +113,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	}
 
 	exportCsvURL.Path = path.Join(exportCsvURL.Path, "query", string(queryID), "export-csv")
-	log.Debug("kicking off export to CSV")
+	qc.log.Debug("kicking off export to CSV")
 	resp, err := qc.client.Get(exportCsvURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to export query")
@@ -123,7 +125,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 		return nil, errors.Wrap(err, "failed to parse batch URL")
 	}
 
-	log.Debug("starting batch process")
+	qc.log.Debug("starting batch process")
 	resp, err = qc.client.Get(batchURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start export batch")
@@ -137,7 +139,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	group.Go(func() error {
 		// TODO: do something with a context here
 		for {
-			log.Debug("requesting progress update")
+			qc.log.Debug("requesting progress update")
 			resp, err = qc.client.PostForm(batchURL.String(), nil)
 			if err != nil {
 				return err
@@ -151,7 +153,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 				return err
 			}
 
-			log.Debug("received update on progress", "progress", prog)
+			qc.log.Debug("received update on progress", "progress", prog)
 
 			if prog.Percentage == 100 {
 				return nil
@@ -167,7 +169,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	query = batchURL.Query()
 	query.Set("op", "finished")
 	batchURL.RawQuery = query.Encode()
-	log.Debug("finishing batch process")
+	qc.log.Debug("finishing batch process")
 	resp, err = qc.client.Get(batchURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to finish export batch")
@@ -186,7 +188,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 
 	downloadURL.Path = path.Join(downloadURL.Path, "export-finished", "download")
 	downloadURL.RawQuery = finalURL.RawQuery
-	log.Debug("downloading CSV result")
+	qc.log.Debug("downloading CSV result")
 	resp, err = qc.client.Get(downloadURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to finish export batch")
@@ -201,7 +203,7 @@ func (qc *QueryClient) GetIncidentCoordinates(queryID QueryID) ([]IncidentCoordi
 	}
 
 	mapURL.Path = path.Join(mapURL.Path, "query", string(queryID), "map")
-	log.Debug("getting map")
+	qc.log.Debug("getting map")
 	resp, err := qc.client.Get(mapURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get map")

@@ -20,7 +20,10 @@ var (
 			config := zap.NewProductionConfig()
 			config.Encoding = "console"
 			if debug {
+				fmt.Println("this is debug")
 				config.Level = zap.NewAtomicLevelAt(zapcore.DebugLevel)
+			} else {
+				config.Level = zap.NewAtomicLevelAt(zapcore.WarnLevel)
 			}
 			l, _ := config.Build()
 			log = l.Sugar()

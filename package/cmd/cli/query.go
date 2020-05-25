@@ -83,7 +83,7 @@ func init() {
 
 func getIncidentResults(root string, queryOptions []gvaclient.QueryOption) ([]gvaclient.IncidentRecord, []gvaclient.IncidentCoordinates, error) {
 	var c Client
-	c, err := gvaclient.NewQueryClient(root)
+	c, err := gvaclient.NewQueryClient(root, log)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to create client")
 	}
