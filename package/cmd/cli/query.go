@@ -121,8 +121,8 @@ type incidentResult struct {
 	Killed       int
 	Injured      int
 	Operations   string
-	Longitude    float64
-	Latitude     float64
+	Longitude    *float64
+	Latitude     *float64
 }
 
 func mergeIncidentResults(incidents []gvaclient.IncidentRecord, coordinates []gvaclient.IncidentCoordinates) []incidentResult {
@@ -133,21 +133,24 @@ func mergeIncidentResults(incidents []gvaclient.IncidentRecord, coordinates []gv
 
 	results := []incidentResult{}
 	for _, incident := range incidents {
-		coord := coordMap[incident.IncidentID]
 		incidentDateSeconds, _ := strtotime.Parse(incident.IncidentDate, time.Now().Unix())
+		result := incidentResult{
+			IncidentID:   incident.IncidentID,
+			IncidentDate: time.Unix(incidentDateSeconds, 0).UTC(),
+			State:        incident.State,
+			CityOrCounty: incident.CityOrCounty,
+			Address:      incident.Address,
+			Killed:       incident.Killed,
+			Injured:      incident.Injured,
+			Operations:   incident.Operations,
+		}
+		coord, ok := coordMap[incident.IncidentID]
+		if ok {
+			result.Latitude = &coord.Latitude
+			result.Longitude = &coord.Longitude
+		}
 
-		results = append(results, incidentResult{
-			incident.IncidentID,
-			time.Unix(incidentDateSeconds, 0).UTC(),
-			incident.State,
-			incident.CityOrCounty,
-			incident.Address,
-			incident.Killed,
-			incident.Injured,
-			incident.Operations,
-			coord.Longitude,
-			coord.Latitude,
-		})
+		results = append(results, result)
 	}
 
 	return results
