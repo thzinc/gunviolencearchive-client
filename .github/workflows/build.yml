@@ -53,6 +53,8 @@ jobs:
 
       - name: build
         run: make package
+        env:
+          VERSION: ${{ steps.gogitver.outputs.version }}
 
       - uses: actions/upload-release-asset@v1.0.1
         env:
