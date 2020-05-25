@@ -8,13 +8,18 @@ import (
 	"github.com/google/uuid"
 )
 
+// QueryOptions holds the form data to post in a query
 type QueryOptions struct {
 	queryData url.Values
 }
+
+// QueryID is a unique identifier of a query
 type QueryID string
 
+// QueryOption is a fluent crtierion for a query
 type QueryOption func(*QueryOptions)
 
+// WithAllCriteriaMatching indicates whether ALL crtieria must match or whether ANY criteria must match
 func WithAllCriteriaMatching(all bool) QueryOption {
 	return func(qo *QueryOptions) {
 		value := "Or"
@@ -25,19 +30,21 @@ func WithAllCriteriaMatching(all bool) QueryOption {
 	}
 }
 
-type ResultsType string
+// resultsType indicates the type of results to return
+type resultsType string
 
 const (
-	Incidents   ResultsType = "incidents"
-	Particiants ResultsType = "participants"
+	resultsTypeIncidents   resultsType = "incidents"
+	resultsTypeParticiants resultsType = "participants"
 )
 
-func WithResultType(resultType ResultsType) QueryOption {
+func withResultType(resultType resultsType) QueryOption {
 	return func(qo *QueryOptions) {
 		qo.queryData.Add("query[results_type][select]", string(resultType))
 	}
 }
 
+// WithIncidentLocation indicates the state, city, and/or county of an incident
 func WithIncidentLocation(state, city, county string) QueryOption {
 	return func(qo *QueryOptions) {
 		criterionID := uuid.New().String()
@@ -56,18 +63,17 @@ func WithIncidentLocation(state, city, county string) QueryOption {
 	}
 }
 
+// IncidentDateComparator indicates how a date range should be specified
 type IncidentDateComparator string
 
 const (
-	IsIn           IncidentDateComparator = "is in"
-	IsNotIn        IncidentDateComparator = "is not in"
-	IsInTheLast    IncidentDateComparator = "is in the last"
-	IsNotInTheLast IncidentDateComparator = "is not in the last"
-	IsCurrentYear  IncidentDateComparator = "is current year"
-	IsYear         IncidentDateComparator = "is year"
-	IsNotYear      IncidentDateComparator = "is not year"
+	// IsIn indicates the date must be between from and to
+	IsIn IncidentDateComparator = "is in"
+	// IsNotIn indicates the date must not be between from and to
+	IsNotIn IncidentDateComparator = "is not in"
 )
 
+// WithIncidentDate indicates the date range of an incident
 func WithIncidentDate(comparator IncidentDateComparator, from, to time.Time) QueryOption {
 	return func(qo *QueryOptions) {
 		criterionID := uuid.New().String()

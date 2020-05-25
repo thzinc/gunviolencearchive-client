@@ -13,7 +13,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/carmo-evan/strtotime"
 	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
@@ -21,35 +23,28 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type IncidentRecord struct {
-	IncidentID   string `csv:"Incident ID"`
-	IncidentDate string `csv:"Incident Date"`
-	State        string `csv:"State"`
-	CityOrCounty string `csv:"City Or County"`
-	Address      string `csv:"Address"`
-	Killed       int    `csv:"# Killed"`
-	Injured      int    `csv:"# Injured"`
-	Operations   string `csv:"Operations"`
+// Incident is a record of an incident of gun violence
+type Incident struct {
+	IncidentID   string    `csv:"Incident ID"`
+	IncidentDate time.Time `csv:"Incident Date"`
+	State        string    `csv:"State"`
+	CityOrCounty string    `csv:"City Or County"`
+	Address      string    `csv:"Address"`
+	Killed       int       `csv:"# Killed"`
+	Injured      int       `csv:"# Injured"`
+	Operations   string    `csv:"Operations"`
+	Longitude    *float64
+	Latitude     *float64
 }
 
-type IncidentCoordinates struct {
-	IncidentID string
-	Longitude  float64
-	Latitude   float64
-}
-
-type progress struct {
-	Status     bool   `json:"status"`
-	Percentage int    `json:"percentage,string"`
-	Message    string `json:"message"`
-}
-
+// QueryClient is a client to query the Gun Violence Archive
 type QueryClient struct {
 	client  *http.Client
 	rootURL string
 	log     *zap.SugaredLogger
 }
 
+// NewQueryClient creates a new QueryClient
 func NewQueryClient(rootURL string, log *zap.SugaredLogger) (*QueryClient, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{})
 	if err != nil {
@@ -69,7 +64,57 @@ func NewQueryClient(rootURL string, log *zap.SugaredLogger) (*QueryClient, error
 	}, nil
 }
 
-func (qc *QueryClient) Query(opts ...QueryOption) (QueryID, error) {
+// QueryIncidents queries incidents from the Gun Violence Archive
+func (qc *QueryClient) QueryIncidents(opts ...QueryOption) ([]Incident, error) {
+	queryID, err := qc.query(append(opts, withResultType(resultsTypeIncidents))...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to start query")
+	}
+
+	reader, err := qc.getRecords(queryID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get records")
+	}
+	defer reader.Close()
+
+	incidents, err := parseIncidentRecords(reader)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse incidents")
+	}
+
+	coordinates, err := qc.getIncidentCoordinates(queryID)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get coordinates")
+	}
+
+	return mergeIncidentResults(incidents, coordinates), nil
+}
+
+type incidentRecord struct {
+	IncidentID   string `csv:"Incident ID"`
+	IncidentDate string `csv:"Incident Date"`
+	State        string `csv:"State"`
+	CityOrCounty string `csv:"City Or County"`
+	Address      string `csv:"Address"`
+	Killed       int    `csv:"# Killed"`
+	Injured      int    `csv:"# Injured"`
+	Operations   string `csv:"Operations"`
+}
+
+type incidentCoordinates struct {
+	IncidentID string
+	Longitude  float64
+	Latitude   float64
+}
+
+type progress struct {
+	Status     bool   `json:"status"`
+	Percentage int    `json:"percentage,string"`
+	Message    string `json:"message"`
+}
+
+// query registers a new query and returns a unique identifier
+func (qc *QueryClient) query(opts ...QueryOption) (QueryID, error) {
 	queryID := uuid.New().String()
 	options := &QueryOptions{
 		queryData: url.Values{
@@ -89,7 +134,7 @@ func (qc *QueryClient) Query(opts ...QueryOption) (QueryID, error) {
 
 	queryURL.Path = path.Join(queryURL.Path, "query")
 
-	qc.log.Debug("registering query",
+	qc.log.Debugw("registering query",
 		"queryID", queryID,
 		"form", options.queryData,
 	)
@@ -106,14 +151,15 @@ func (qc *QueryClient) Query(opts ...QueryOption) (QueryID, error) {
 	return QueryID(queryID), nil
 }
 
-func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
+// getRecords returns a reader of CSV data for a given QueryID
+func (qc *QueryClient) getRecords(queryID QueryID) (io.ReadCloser, error) {
 	exportCsvURL, err := url.Parse(qc.rootURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse root URL")
 	}
 
 	exportCsvURL.Path = path.Join(exportCsvURL.Path, "query", string(queryID), "export-csv")
-	qc.log.Debug("kicking off export to CSV")
+	qc.log.Debugw("kicking off export to CSV")
 	resp, err := qc.client.Get(exportCsvURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to export query")
@@ -125,7 +171,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 		return nil, errors.Wrap(err, "failed to parse batch URL")
 	}
 
-	qc.log.Debug("starting batch process")
+	qc.log.Debugw("starting batch process")
 	resp, err = qc.client.Get(batchURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to start export batch")
@@ -139,7 +185,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	group.Go(func() error {
 		// TODO: do something with a context here
 		for {
-			qc.log.Debug("requesting progress update")
+			qc.log.Debugw("requesting progress update")
 			resp, err = qc.client.PostForm(batchURL.String(), nil)
 			if err != nil {
 				return err
@@ -153,7 +199,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 				return err
 			}
 
-			qc.log.Debug("received update on progress", "progress", prog)
+			qc.log.Debugw("received update on progress", "progress", prog)
 
 			if prog.Percentage == 100 {
 				return nil
@@ -169,12 +215,11 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	query = batchURL.Query()
 	query.Set("op", "finished")
 	batchURL.RawQuery = query.Encode()
-	qc.log.Debug("finishing batch process")
+	qc.log.Debugw("finishing batch process")
 	resp, err = qc.client.Get(batchURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to finish export batch")
 	}
-	// defer resp.Body.Close()
 
 	finalURL, err := url.Parse(resp.Header.Get("Location"))
 	if err != nil {
@@ -188,7 +233,7 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 
 	downloadURL.Path = path.Join(downloadURL.Path, "export-finished", "download")
 	downloadURL.RawQuery = finalURL.RawQuery
-	qc.log.Debug("downloading CSV result")
+	qc.log.Debugw("downloading CSV result")
 	resp, err = qc.client.Get(downloadURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to finish export batch")
@@ -196,14 +241,15 @@ func (qc *QueryClient) GetRecords(queryID QueryID) (io.ReadCloser, error) {
 	return resp.Body, errors.Wrap(err, "failed to read CSV stream")
 }
 
-func (qc *QueryClient) GetIncidentCoordinates(queryID QueryID) ([]IncidentCoordinates, error) {
+// getIncidentCoordinates gets the lon/lat coordinates of incidents for a given QueryID
+func (qc *QueryClient) getIncidentCoordinates(queryID QueryID) ([]incidentCoordinates, error) {
 	mapURL, err := url.Parse(qc.rootURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse root URL")
 	}
 
 	mapURL.Path = path.Join(mapURL.Path, "query", string(queryID), "map")
-	qc.log.Debug("getting map")
+	qc.log.Debugw("getting map")
 	resp, err := qc.client.Get(mapURL.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get map")
@@ -216,7 +262,7 @@ func (qc *QueryClient) GetIncidentCoordinates(queryID QueryID) ([]IncidentCoordi
 	re := regexp.MustCompile(fmt.Sprintf(`"interactive-map-%s":"([\d+\-\.|]+)"`, queryID))
 	result := re.FindAllStringSubmatch(string(body), -1)
 	rawCoordinates := result[0][1]
-	coordinates := []IncidentCoordinates{}
+	coordinates := []incidentCoordinates{}
 	for _, line := range strings.Split(rawCoordinates, "||") {
 		parts := strings.Split(line, "|")
 		lonStr, latStr, id := parts[0], parts[1], parts[2]
@@ -231,7 +277,7 @@ func (qc *QueryClient) GetIncidentCoordinates(queryID QueryID) ([]IncidentCoordi
 			return nil, errors.Wrap(err, fmt.Sprintf("failed to parse latitude for incident %s", id))
 		}
 
-		coordinates = append(coordinates, IncidentCoordinates{
+		coordinates = append(coordinates, incidentCoordinates{
 			IncidentID: id,
 			Longitude:  lon,
 			Latitude:   lat,
@@ -241,12 +287,45 @@ func (qc *QueryClient) GetIncidentCoordinates(queryID QueryID) ([]IncidentCoordi
 	return coordinates, nil
 }
 
-func ParseIncidentRecords(readCloser io.Reader) ([]IncidentRecord, error) {
-	var incidents []IncidentRecord
+// parseIncidentRecords parses CSV results representing incidents into an incidentRecord
+func parseIncidentRecords(readCloser io.Reader) ([]incidentRecord, error) {
+	var incidents []incidentRecord
 	err := gocsv.Unmarshal(readCloser, &incidents)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal incidents")
 	}
 
 	return incidents, nil
+}
+
+// mergeIncidentResults merges incidents and coordinates on IncidentID
+func mergeIncidentResults(incidents []incidentRecord, coordinates []incidentCoordinates) []Incident {
+	coordMap := map[string]incidentCoordinates{}
+	for _, coord := range coordinates {
+		coordMap[coord.IncidentID] = coord
+	}
+
+	results := []Incident{}
+	for _, incident := range incidents {
+		incidentDateSeconds, _ := strtotime.Parse(incident.IncidentDate, time.Now().Unix())
+		result := Incident{
+			IncidentID:   incident.IncidentID,
+			IncidentDate: time.Unix(incidentDateSeconds, 0).UTC(),
+			State:        incident.State,
+			CityOrCounty: incident.CityOrCounty,
+			Address:      incident.Address,
+			Killed:       incident.Killed,
+			Injured:      incident.Injured,
+			Operations:   incident.Operations,
+		}
+		coord, ok := coordMap[incident.IncidentID]
+		if ok {
+			result.Latitude = &coord.Latitude
+			result.Longitude = &coord.Longitude
+		}
+
+		results = append(results, result)
+	}
+
+	return results
 }
