@@ -12,12 +12,14 @@ import (
 )
 
 var (
-	rootURL      string
-	inState      string
-	fromDate     string
-	toDate       string
-	queryOptions []gvaclient.QueryOption
-	queryCmd     = &cobra.Command{
+	rootURL                  string
+	inState                  string
+	fromDate                 string
+	toDate                   string
+	participantAge           int
+	participantAgeComparator comparator = comparator{value: gvaclient.IsEqualTo}
+	queryOptions             []gvaclient.QueryOption
+	queryCmd                 = &cobra.Command{
 		Use:   "query",
 		Short: "Queries the Gun Violence Archive",
 		Long:  "Queries and prints comma-separated values. The Gun Violence Archive places opaque limits on the number of records returned for large queries, so your results may be artificially truncated for large queries.",
@@ -50,6 +52,8 @@ func init() {
 	queryCmd.PersistentFlags().StringVar(&inState, "in-state", "", "Specify a state to filter results by")
 	queryCmd.PersistentFlags().StringVar(&fromDate, "from", "", "Specify the start date to filter results by (inclusive)")
 	queryCmd.PersistentFlags().StringVar(&toDate, "to", "", "Specify the end date to filter results by (inclusive)")
+	queryCmd.PersistentFlags().IntVar(&participantAge, "participant-age", -1, "Specify the age in years of any participant to evaluate")
+	queryCmd.PersistentFlags().Var(&participantAgeComparator, "participant-age-comparator", "Specify how to compare the participant age")
 	queryCmd.AddCommand(incidentCmd)
 	RootCmd.AddCommand(queryCmd)
 }
@@ -82,6 +86,13 @@ func populateQueryOptions(cmd *cobra.Command, args []string) {
 			gvaclient.IsIn,
 			time.Unix(from, 0).UTC(),
 			time.Unix(to, 0).UTC(),
+		))
+	}
+
+	if participantAge > -1 {
+		queryOptions = append(queryOptions, gvaclient.WithParticipantsAge(
+			participantAgeComparator.Value(),
+			participantAge,
 		))
 	}
 }

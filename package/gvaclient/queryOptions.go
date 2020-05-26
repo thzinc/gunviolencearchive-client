@@ -3,6 +3,7 @@ package gvaclient
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -82,5 +83,30 @@ func WithIncidentDate(comparator IncidentDateComparator, from, to time.Time) Que
 		qo.queryData.Add(fmt.Sprintf("query[filters][%s][outer_filter][comparator]", criterionID), string(comparator))
 		qo.queryData.Add(fmt.Sprintf("query[filters][%s][outer_filter][filter][field][date-from]", criterionID), from.Format("01/02/2006"))
 		qo.queryData.Add(fmt.Sprintf("query[filters][%s][outer_filter][filter][field][date-to]", criterionID), to.Format("01/02/2006"))
+	}
+}
+
+// Comparator indicates how a value should be compared
+type Comparator string
+
+const (
+	// IsGreaterThan indicates the queried value should be greater than the given value
+	IsGreaterThan Comparator = "is greater than"
+	// IsLessThan indicates the queried value should be less than the given value
+	IsLessThan Comparator = "is less than"
+	// IsEqualTo indicates the queried value should be equal to the given value
+	IsEqualTo Comparator = "is equal to"
+	// IsNotEqualTo indicates the queried value should not be equal to the given value
+	IsNotEqualTo Comparator = "is not equal to"
+)
+
+// WithParticipantsAge indicates the age of any participant of an incident
+func WithParticipantsAge(comparator Comparator, age int) QueryOption {
+	return func(qo *QueryOptions) {
+		criterionID := uuid.New().String()
+		qo.queryData.Add(fmt.Sprintf("query[filters][%s][type]", criterionID), "ParticipantsAge")
+		qo.queryData.Add(fmt.Sprintf("query[filters][%s][outer_filter][weight]", criterionID), "0.001")
+		qo.queryData.Add(fmt.Sprintf("query[filters][%s][outer_filter][comparator]", criterionID), string(comparator))
+		qo.queryData.Add(fmt.Sprintf("query[filters][%s][outer_filter][filter][field][value]", criterionID), strconv.Itoa(age))
 	}
 }
