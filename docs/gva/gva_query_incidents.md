@@ -19,11 +19,13 @@ gva query incidents [flags]
 ### Options inherited from parent commands
 
 ```
-      --from string       Specify the start date to filter results by (inclusive)
-      --in-state string   Specify a state to filter results by
-      --to string         Specify the end date to filter results by (inclusive)
-  -u, --url string        Specify a URL to use as the root for accessing the API (default "https://www.gunviolencearchive.org")
-  -v, --verbose           Enable verbose logging
+      --from string                             Specify the start date to filter results by (inclusive)
+      --in-state string                         Specify a state to filter results by
+      --participant-age int                     Specify the age in years of any participant to evaluate (default -1)
+      --participant-age-comparator Comparator   Specify how to compare the participant age (default is equal to)
+      --to string                               Specify the end date to filter results by (inclusive)
+  -u, --url string                              Specify a URL to use as the root for accessing the API (default "https://www.gunviolencearchive.org")
+  -v, --verbose                                 Enable verbose logging
 ```
 
 ### SEE ALSO
