@@ -36,6 +36,6 @@ func init() {
 func Execute() {
 	err := RootCmd.Execute()
 	if err != nil {
-		log.Fatal(err.Error())
+		panic(err)
 	}
 }
